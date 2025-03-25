@@ -207,14 +207,15 @@ class RecursiveChunker(BaseChunker):
             return self.tokenizer.count_tokens(text)
 
     def _create_chunk(
-        self, text: str, token_count: int, level: int, full_text: Optional[str] = None
+        self, text: str, token_count: int, level: int, start_offset: int, full_text: Optional[str] = None
     ) -> RecursiveChunk:
         """Create a chunk."""
+        print("Text in current chunk creation ", text)
         if full_text is None:
             full_text = text
         try:
-            start_index = full_text.index(text)
-            end_index = start_index + len(text)
+            start_index = start_offset
+            end_index = start_offset + len(text)
         except Exception as e:
             print(
                 f"Error getting start_index and end_index: {e}"
@@ -233,7 +234,7 @@ class RecursiveChunker(BaseChunker):
         )
 
     def _recursive_chunk(
-        self, text: str, level: int = 0, full_text: Optional[str] = None
+        self, text: str, level: int = 0, start_offset: int =0,full_text: Optional[str] = None
     ) -> Sequence[RecursiveChunk]:
         """Recursive chunking logic."""
         # First make sure the text is not empty
@@ -282,9 +283,10 @@ class RecursiveChunker(BaseChunker):
 
         # Recursively chunk the merged splits if they are too long
         chunks = []
+        current_offset = start_offset
         for split, token_count in zip(merged, merged_token_counts):
             if token_count > self.chunk_size:
-                chunks.extend(self._recursive_chunk(split, level + 1, full_text))
+                chunks.extend(self._recursive_chunk(split, level + 1, current_offset, full_text))
             else:
                 if self.return_type == "chunks":
                     if rule.delimiters is None and not rule.whitespace:
@@ -292,19 +294,20 @@ class RecursiveChunker(BaseChunker):
                         # And we don't want to encode/decode the text again, that would be inefficient
                         decoded_text = "".join(merged)
                         chunks.append(
-                            self._create_chunk(split, token_count, level, decoded_text)
+                            self._create_chunk(split, token_count, level, current_offset,decoded_text)
                         )
                     else:
                         chunks.append(
-                            self._create_chunk(split, token_count, level, full_text)
+                            self._create_chunk(split, token_count, level, current_offset, full_text)
                         )
                 elif self.return_type == "texts":
                     chunks.append(split)
+            current_offset += len(split)
         return chunks
 
     def chunk(self, text: str) -> Sequence[Chunk]:
         """Chunk the text."""
-        return self._recursive_chunk(text, level=0, full_text=text)
+        return self._recursive_chunk(text, level=0, full_text=text, start_offset=0)
 
     def __repr__(self) -> str:
         """Get a string representation of the recursive chunker."""
